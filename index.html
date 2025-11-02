@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+
+<style>
+    #myVideo {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  min-width: 100%;
+  min-height: 100%;
+}
+
+/* Add some content at the bottom of the video/page */
+.content {
+  position: fixed;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  color: #f1f1f1;
+  width: 100%;
+  padding: 20px;
+}
+
+/* Style the button used to pause/play the video */
+#myBtn {
+  width: 200px;
+  font-size: 18px;
+  padding: 10px;
+  border: none;
+  background: #000;
+  color: #fff;
+  cursor: pointer;
+}
+
+#myBtn:hover {
+  background: #ddd;
+  color: black;
+}
+body {
+  font-family: roboto;
+  margin: 2em;
+  color: #3d3d3d;
+  --mdc-theme-primary: #007f8b;
+  --mdc-theme-on-primary: #f1f3f4;
+}
+
+h1 {
+  color: #007f8b;
+}
+
+video {
+  clear: both;
+  display: block;
+  transform: rotateY(180deg);
+}
+
+section {
+  opacity: 1;
+  transition: opacity 500ms ease-in-out;
+}
+
+.invisible {
+  opacity: 0.2;
+}
+
+.videoView {
+  position: relative;
+  width: 48%;
+  margin: 2% 1%;
+}
+
+.videoView p {
+  position: absolute;
+  padding: 5px;
+  background-color: #007f8b;
+  color: #fff;
+  border: 1px dashed rgba(255,255,255,0.7);
+  z-index: 2;
+  font-size: 12px;
+  margin: 0;
+}
+
+.highlighter {
+  background: rgba(0,255,0,0.25);
+  border: 1px dashed #fff;
+  z-index: 1;
+  position: absolute;
+}
+.highlighter2 {
+  background: rgba(46, 203, 255, 0.969);
+  border: 1px dashed #fff;
+  z-index: 1;
+  position: absolute;
+}
+.highlighter3 {
+  background: rgba(220, 23, 23, 0.941);
+  border: 1px dashed #fff;
+  z-index: 1;
+  position: absolute;
+}
+</style>
+</head>
+
+<body>
+    <div style="width:100%;max-width:800px;margin:auto;text-align:center;">
+    <canvas id="c" width="800" height="360" style="width:100%;border-radius:8px;background:linear-gradient(180deg,#2b2b30,#1a1a1d);"></canvas>
+    </div>
+    <script>
+    const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+    let W=canvas.width,H=canvas.height,time=0,eyeRadius=100,pupilRadius=28;
+    const eyes=[{x:W*0.33,y:H*0.5},{x:W*0.67,y:H*0.5}],
+        pupils=[{rx:0,ry:0,vx:0,vy:0,jitter:0.8,blink:0,expression:0},{rx:0,ry:0,vx:0,vy:0,jitter:1.2,blink:0,expression:0}];
+    function drawEye(ex,ey,p){ctx.save();const r=eyeRadius,grad=ctx.createRadialGradient(ex-r*0.25,ey-r*0.3,r*0.1,ex,ey,r);
+    grad.addColorStop(0,'rgba(255,255,255,0.95)');grad.addColorStop(0.25,'rgba(255,255,255,0.9)');grad.addColorStop(1,'rgba(220,220,220,0.08)');ctx.fillStyle=grad;ctx.beginPath();ctx.arc(ex,ey,r,0,Math.PI*2);ctx.fill();ctx.lineWidth=Math.max(2,r*0.08);ctx.strokeStyle='rgba(0,0,0,0.28)';ctx.stroke();
+    let pupilX=ex,pupilY=ey;switch(p.expression){case 0:pupilX+=Math.sin(time*4)*20;pupilY+=Math.cos(time*3.5)*12;break;case 1:pupilX+=(p===pupils[0]?20:-20);pupilY+=Math.sin(time*2)*10;break;case 2:pupilX+=Math.sin(time*1.5)*15;pupilY+=0;break;case 3:pupilX+=Math.sin(time*5)*25;pupilY+=Math.cos(time*5)*25;break;case 4:pupilX+=Math.sin(time*7)*35;pupilY+=Math.cos(time*3)*18;break;}
+    ctx.beginPath();ctx.arc(pupilX,pupilY,pupilRadius,0,Math.PI*2);ctx.fillStyle='#000';ctx.fill();ctx.beginPath();ctx.arc(pupilX-pupilRadius*0.4,pupilY-pupilRadius*0.6,pupilRadius*0.5,0,Math.PI*2);ctx.fillStyle='rgba(255,255,255,0.9)';ctx.fill();ctx.restore();}
+    function animate(){time+=0.02;ctx.clearRect(0,0,W,H);ctx.save();ctx.fillStyle='rgba(255,255,255,0.02)';ctx.fillRect(0,0,W,H);ctx.restore();for(let i=0;i<eyes.length;i++)drawEye(eyes[i].x,eyes[i].y,pupils[i]);requestAnimationFrame(animate);}
+    setInterval(()=>{pupils.forEach(p=>p.expression=Math.floor(Math.random()*5));},2000);
+    requestAnimationFrame(animate);
+    </script>
+<section id="demos" class="invisible">
+  <div id="liveView" class="videoView" style="visibility: hidden">
+    <video id="webcam" autoplay playsinline></video>
+  </div>
+</section>
+
+<script type="module">
+import {
+  ObjectDetector,
+  FilesetResolver,
+} from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.2";
+
+const demosSection = document.getElementById("demos");
+let objectDetector;
+let runningMode = "IMAGE";
+let video = document.getElementById("webcam");
+const liveView = document.getElementById("liveView");
+let children = [];
+let lastVideoTime = -1;
+
+// MODEL INIT
+const initializeObjectDetector = async () => {
+  const vision = await FilesetResolver.forVisionTasks(
+    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.2/wasm"
+  );
+
+  objectDetector = await ObjectDetector.createFromOptions(vision, {
+    baseOptions: {
+      modelAssetPath:
+        "https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/float16/1/efficientdet_lite0.tflite",
+      delegate: "GPU",
+    },
+    scoreThreshold: 0.5,
+    maxResults:1,
+    categoryAllowlist:["person"],
+    runningMode,
+  });
+
+  demosSection.classList.remove("invisible");
+
+  // Start cam automatically
+  enableCam();
+  
+  console.log("Model ready — starting webcam!");
+};
+
+initializeObjectDetector();
+
+async function enableCam() {
+  navigator.mediaDevices.getUserMedia({ video: true }).then((stream) => {
+    video.srcObject = stream;
+    video.addEventListener("loadeddata", predictWebcam);
+  });
+}
+
+async function predictWebcam() {
+  if (runningMode === "IMAGE") {
+    runningMode = "VIDEO";
+    await objectDetector.setOptions({ runningMode: "VIDEO" });
+  }
+
+  let startTimeMs = performance.now();
+
+  if (video.currentTime !== lastVideoTime) {
+    lastVideoTime = video.currentTime;
+    const detections = objectDetector.detectForVideo(video, startTimeMs);
+    displayVideoDetections(detections);
+  }
+
+  window.requestAnimationFrame(predictWebcam);
+}
+
+function displayVideoDetections(result) {
+  for (let child of children) {
+    liveView.removeChild(child);
+  }
+  children = [];
+
+  for (let detection of result.detections) {
+    const p = document.createElement("p");
+    p.innerText =
+      detection.categories[0].categoryName +
+      " - " +
+      Math.round(detection.categories[0].score * 100) +
+      "%";
+    p.style =
+      "left:" + (video.offsetWidth - detection.boundingBox.width - detection.boundingBox.originX) +
+      "px;top:" + detection.boundingBox.originY +
+      "px;width:" + (detection.boundingBox.width - 10) + "px;";
+    //console.log("Height:"+detection.boundingBox.height+"width:"+detection.boundingBox.width+"X"+detection.boundingBox.originX+"Y:"+detection.boundingBox.originY)
+    const highlighter = document.createElement("div");
+    highlighter.setAttribute("class", "highlighter");
+    highlighter.style =
+      "left:" + (video.offsetWidth - detection.boundingBox.width - detection.boundingBox.originX) +
+      "px;top:" + detection.boundingBox.originY +
+      "px;width:" + (detection.boundingBox.width - 10) +
+      "px;height:" + detection.boundingBox.height + "px;";
+
+
+    const highlighter2 = document.createElement("div");
+    highlighter2.setAttribute("class", "highlighter2");
+    highlighter2.style =
+      "left:" + ((video.offsetWidth - detection.boundingBox.width - detection.boundingBox.originX)+detection.boundingBox.width/2) +
+      "px;top:" + (detection.boundingBox.originY+detection.boundingBox.height/2) +
+      "px;width:" + 10 +
+      "px;height:" + 10 + "px;";
+     
+    const highlighter3 = document.createElement("div");
+    highlighter3.setAttribute("class", "highlighter3");
+    highlighter3.style =
+      "left:" + (video.offsetWidth/2 ) +
+      "px;top:" + (video.offsetHeight/2) +
+      "px;width:" + 20 +
+      "px;height:" + 20 + "px;";
+     
+    liveView.appendChild(highlighter2);
+    liveView.appendChild(highlighter3);
+    liveView.appendChild(highlighter);
+    liveView.appendChild(p);
+
+    children.push(highlighter, p);
+
+    let secondsLR = ((((video.offsetWidth - detection.boundingBox.width - detection.boundingBox.originX)+detection.boundingBox.width/2)-video.offsetWidth/2)/video.offsetWidth)*100;
+    //console.log(secondsLR);
+    let secondsBF = (((detection.boundingBox.originY+detection.boundingBox.height/2)-video.offsetHeight/2)/video.offsetHeight)*100;
+    console.log(secondsBF);
+    //fetch("/control/forward/"+seconds);
+
+    async function SendBF() {
+  try {
+    const response = await fetch(`/control/drive/${secondsBF}`);
+    const data = await response.json();
+    console.log(data);
+  } catch (error) {
+    console.error("Error:", error);
+  }
+}
+async function SendLR() {
+  try {
+    const response = await fetch(`/control/turn/${secondsLR}`);
+    const data = await response.json();
+    console.log(data);
+  } catch (error) {
+    console.error("Error:", error);
+  }
+}
+SendBF();
+
+setTimeout(() => {
+    SendLR()
+}, secondsBF);
+
+setTimeout(() => {
+    displayVideoDetections()
+}, secondsLR);
+
+}
+}
+
+
+
+</script>
+</body>
+</html>
